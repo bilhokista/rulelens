@@ -17,6 +17,31 @@ npx tsx src/cli.ts <C-address> --json                            # machine-reada
 
 Exit code `0` means no critical or high findings, `1` means at least one, `2` means a usage or network error.
 
+## Who can authorize a call
+
+```sh
+npx tsx src/cli.ts <account> --simulate <token C-address>:transfer:1000
+npx tsx src/cli.ts <account> --simulate create:<wasm-hash>
+```
+
+The transaction author picks which context rule authorizes each call, so an account is only as strict as the weakest
+rule that matches. `--simulate` lists every active matching rule, the smallest signer set each accepts
+(`BLOCKED` when it can never pass, `UNDETERMINED` for custom policies), and flags a Default rule that bypasses a
+stricter rule scoped to the same contract. It is an off-chain model of `smart_account::do_check_auth` in
+stellar-contracts v0.7.2; no signing or submission happens.
+
+### Verified against the chain
+
+`scripts/verifyOnChain.ts` submits real testnet XLM transfers out of the fixture accounts with a chosen signer set and
+compares the result of `__check_auth` with the model. Last run (2026-09-13), 4 of 4 matched:
+
+| Case | Model | Chain |
+|---|---|---|
+| 1-of-3 fixture, 1 signer | pass | SUCCESS `d9c13fb7…29a5` |
+| 2-of-2 control, 1 signer | fail | `Error(Contract, #3202)` simple threshold NotAllowed |
+| 2-of-2 control, 2 signers | pass | SUCCESS `4926fba7…1d80` |
+| Weighted fixture, 2 signers (weight 2 of 3) | fail | `Error(Contract, #3213)` weighted threshold NotAllowed |
+
 ## Checks
 
 | Check | Severity | What it detects |
@@ -56,6 +81,7 @@ npm run coverage
 
 - Cross-verifier check compares raw key bytes; canonical comparison through `batch_canonicalize_key` is not done.
 - Spending-limit and cross-verifier checks have unit tests but no testnet fixture yet.
-- Simulation of `__check_auth` for a given context is planned, not implemented.
+- `--simulate` models one context per call; multi-context transactions and policy combinations are lower bounds.
+- Rules with custom (non-OpenZeppelin) policies are reported as undetermined.
 
 License: Apache-2.0

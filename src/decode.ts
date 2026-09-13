@@ -1,5 +1,5 @@
 import { Address, scValToNative, xdr } from '@stellar/stellar-sdk';
-import type { ContextType, Signer } from './types.js';
+import type { ContextType, Signer, SpendingEntry } from './types.js';
 
 /**
  * Soroban `contracttype` enums encode as ScVec [Symbol(variant), ...fields];
@@ -102,17 +102,21 @@ export interface SpendingData {
   periodLedgers: number;
   historyLength: number;
   zeroAmountEntries: number;
+  history: SpendingEntry[];
 }
 
 export function decodeSpendingData(val: xdr.ScVal): SpendingData {
   const history = vecOf(structField(val, 'spending_history'));
-  const zeroAmountEntries = history.filter(
-    entry => BigInt(scValToNative(structField(entry, 'amount'))) === 0n
-  ).length;
+  const entries = history.map(entry => ({
+    amount: BigInt(scValToNative(structField(entry, 'amount'))),
+    ledger: Number(scValToNative(structField(entry, 'ledger_sequence'))),
+  }));
+  const zeroAmountEntries = entries.filter(entry => entry.amount === 0n).length;
   return {
     spendingLimit: BigInt(scValToNative(structField(val, 'spending_limit'))),
     periodLedgers: Number(scValToNative(structField(val, 'period_ledgers'))),
     historyLength: history.length,
     zeroAmountEntries,
+    history: entries,
   };
 }

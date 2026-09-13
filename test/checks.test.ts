@@ -150,6 +150,7 @@ describe('spendingHistoryPressure', () => {
             periodLedgers: 17280,
             historyLength,
             zeroAmountEntries,
+            history: [],
           },
         ],
       }),

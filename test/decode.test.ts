@@ -86,6 +86,11 @@ describe('decode', () => {
       periodLedgers: 17280,
       historyLength: 3,
       zeroAmountEntries: 2,
+      history: [
+        { amount: 0n, ledger: 1 },
+        { amount: 5n, ledger: 1 },
+        { amount: 0n, ledger: 1 },
+      ],
     });
   });
 

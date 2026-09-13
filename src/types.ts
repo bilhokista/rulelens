@@ -12,6 +12,11 @@ export type ContextType =
   | { kind: 'callContract'; contract: string }
   | { kind: 'createContract'; wasmHashHex: string };
 
+export interface SpendingEntry {
+  amount: bigint;
+  ledger: number;
+}
+
 export type Policy =
   | { kind: 'simpleThreshold'; address: string; threshold: number }
   | {
@@ -27,6 +32,7 @@ export type Policy =
       periodLedgers: number;
       historyLength: number;
       zeroAmountEntries: number;
+      history: ReadonlyArray<SpendingEntry>;
     }
   | { kind: 'unknown'; address: string };
 
