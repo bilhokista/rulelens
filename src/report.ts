@@ -32,7 +32,8 @@ export function formatAuthPaths(target: AuthTarget, paths: AuthPath[]): string {
     return lines.join('\n');
   }
   for (const path of paths) {
-    const status = path.usable === true ? `${path.minSigners} signer(s)` : path.usable === false ? 'BLOCKED' : 'UNDETERMINED';
+    const keys = path.minKeys !== null && path.minKeys !== path.minSigners ? ` from ${path.minKeys} distinct key(s)` : '';
+    const status = path.usable === true ? `${path.minSigners} signer(s)${keys}` : path.usable === false ? 'BLOCKED' : 'UNDETERMINED';
     lines.push(`rule ${path.ruleId} "${path.ruleName}": ${status}`);
     lines.push(`  ${path.summary}`);
     for (const note of path.notes) lines.push(`  note: ${note}`);
@@ -40,7 +41,9 @@ export function formatAuthPaths(target: AuthTarget, paths: AuthPath[]): string {
   }
   const weakest = paths[0];
   if (weakest.usable === true) {
-    lines.push(`Weakest path: rule ${weakest.ruleId} with ${weakest.minSigners} signer(s). This is the real security of the call.`);
+    lines.push(
+      `Weakest path: rule ${weakest.ruleId}, ${weakest.minKeys} distinct key(s) (${weakest.minSigners} signer entries). This is the real security of the call.`
+    );
   }
   return lines.join('\n');
 }

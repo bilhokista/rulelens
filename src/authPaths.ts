@@ -18,6 +18,8 @@ export interface AuthPath {
   /** true: satisfiable, false: can never pass for this target, null: depends on logic RuleLens cannot model. */
   usable: boolean | null;
   minSigners: number | null;
+  /** Distinct keys behind those signers; lower when one key is registered under several verifiers. */
+  minKeys: number | null;
   summary: string;
   notes: string[];
 }
@@ -25,6 +27,7 @@ export interface AuthPath {
 interface Requirement {
   usable: boolean | null;
   minSigners: number | null;
+  minKeys: number | null;
   summary: string;
   notes: string[];
 }
@@ -40,12 +43,31 @@ function matchesTarget(rule: ContextRule, target: AuthTarget): boolean {
 
 const names = (signers: ReadonlyArray<Signer>) => signers.map(signerKey).join(', ');
 
+/** The device behind a signer: an external key is the same device under any verifier. */
+const keyIdentity = (signer: Signer) =>
+  signer.kind === 'external' ? `key:${signer.keyHex.toLowerCase()}` : `address:${signer.address}`;
+
+/** Smallest number of distinct keys whose grouped values reach `target`. */
+function fewestKeys(values: Array<{ signer: Signer; value: number }>, target: number): number | null {
+  const byKey = new Map<string, number>();
+  for (const { signer, value } of values) byKey.set(keyIdentity(signer), (byKey.get(keyIdentity(signer)) ?? 0) + value);
+  let total = 0;
+  let keys = 0;
+  for (const value of [...byKey.values()].sort((a, b) => b - a)) {
+    if (total >= target) break;
+    total += value;
+    keys++;
+  }
+  return total >= target ? Math.max(keys, 1) : null;
+}
+
 function thresholdRequirement(rule: ContextRule, policy: Extract<Policy, { kind: 'simpleThreshold' }>): Requirement {
   const n = rule.signers.length;
   if (policy.threshold > n) {
     return {
       usable: false,
       minSigners: null,
+      minKeys: null,
       summary: `threshold ${policy.threshold} exceeds ${n} signer(s)`,
       notes: [],
     };
@@ -53,6 +75,7 @@ function thresholdRequirement(rule: ContextRule, policy: Extract<Policy, { kind:
   return {
     usable: true,
     minSigners: policy.threshold,
+    minKeys: fewestKeys(rule.signers.map(signer => ({ signer, value: 1 })), policy.threshold),
     summary: `any ${policy.threshold} of [${names(rule.signers)}]`,
     notes: [],
   };
@@ -77,6 +100,7 @@ function weightedRequirement(rule: ContextRule, policy: Extract<Policy, { kind: 
     return {
       usable: false,
       minSigners: null,
+      minKeys: null,
       summary: `signers reach weight ${total} of ${policy.threshold}`,
       notes: [],
     };
@@ -84,6 +108,7 @@ function weightedRequirement(rule: ContextRule, policy: Extract<Policy, { kind: 
   return {
     usable: true,
     minSigners: chosen.length,
+    minKeys: fewestKeys(ranked.map(w => ({ signer: w.signer, value: w.weight })), policy.threshold),
     summary: `weight ${policy.threshold} reachable with [${names(chosen)}]`,
     notes: [],
   };
@@ -95,7 +120,7 @@ function spendingRequirement(
   currentLedger: number
 ): Requirement {
   if (target.kind !== 'call' || target.fn !== SPENDING_FN) {
-    return { usable: false, minSigners: null, summary: `spending limit only allows ${SPENDING_FN}`, notes: [] };
+    return { usable: false, minSigners: null, minKeys: null, summary: `spending limit only allows ${SPENDING_FN}`, notes: [] };
   }
   const cutoff = Math.max(0, currentLedger - policy.periodLedgers);
   const spent = policy.history.filter(e => e.ledger > cutoff).reduce((sum, e) => sum + e.amount, 0n);
@@ -103,12 +128,12 @@ function spendingRequirement(
   const note = `spending limit ${policy.spendingLimit}, spent ${spent} in window, remaining ${remaining}`;
 
   if (target.amount === undefined) {
-    return { usable: null, minSigners: 1, summary: 'transfer within spending limit', notes: [`${note}; pass an amount to decide`] };
+    return { usable: null, minSigners: 1, minKeys: 1, summary: 'transfer within spending limit', notes: [`${note}; pass an amount to decide`] };
   }
   if (target.amount < 0n || target.amount > remaining) {
-    return { usable: false, minSigners: null, summary: `amount ${target.amount} exceeds remaining ${remaining}`, notes: [note] };
+    return { usable: false, minSigners: null, minKeys: null, summary: `amount ${target.amount} exceeds remaining ${remaining}`, notes: [note] };
   }
-  return { usable: true, minSigners: 1, summary: 'transfer within spending limit', notes: [note] };
+  return { usable: true, minSigners: 1, minKeys: 1, summary: 'transfer within spending limit', notes: [note] };
 }
 
 function policyRequirement(rule: ContextRule, policy: Policy, target: AuthTarget, currentLedger: number): Requirement {
@@ -123,6 +148,7 @@ function policyRequirement(rule: ContextRule, policy: Policy, target: AuthTarget
       return {
         usable: null,
         minSigners: null,
+        minKeys: null,
         summary: `custom policy ${policy.address}`,
         notes: ['custom policy logic is not modelled'],
       };
@@ -132,26 +158,37 @@ function policyRequirement(rule: ContextRule, policy: Policy, target: AuthTarget
 function combine(rule: ContextRule, target: AuthTarget, currentLedger: number): Requirement {
   if (rule.policies.length === 0) {
     const n = rule.signers.length;
-    return { usable: n > 0, minSigners: n > 0 ? n : null, summary: `all of [${names(rule.signers)}]`, notes: [] };
+    const keys = new Set(rule.signers.map(keyIdentity)).size;
+    return {
+      usable: n > 0,
+      minSigners: n > 0 ? n : null,
+      minKeys: n > 0 ? keys : null,
+      summary: `all of [${names(rule.signers)}]`,
+      notes: [],
+    };
   }
 
   const parts = rule.policies.map(p => policyRequirement(rule, p, target, currentLedger));
   const notes = parts.flatMap(p => p.notes);
   const summary = parts.map(p => p.summary).join(' AND ');
 
-  if (parts.some(p => p.usable === false)) return { usable: false, minSigners: null, summary, notes };
+  if (parts.some(p => p.usable === false)) return { usable: false, minSigners: null, minKeys: null, summary, notes };
   if (parts.some(p => p.usable === null)) {
-    return { usable: null, minSigners: null, summary, notes };
+    return { usable: null, minSigners: null, minKeys: null, summary, notes };
   }
   const counted = parts.filter(p => p.minSigners !== null);
   if (counted.length > 1) notes.push('several policies: signer count is a lower bound, each policy may need different signers');
   const minSigners = Math.max(1, ...counted.map(p => p.minSigners as number));
-  return { usable: true, minSigners, summary, notes };
+  const minKeys = Math.max(1, ...counted.map(p => p.minKeys ?? (p.minSigners as number)));
+  if (minKeys < minSigners) notes.push(`${minSigners} signer entries can be satisfied by ${minKeys} distinct key(s)`);
+  return { usable: true, minSigners, minKeys, summary, notes };
 }
 
+const UNRANKED = 1_000_000;
+
 function rank(path: AuthPath): number {
-  if (path.usable === true) return path.minSigners ?? Number.MAX_SAFE_INTEGER;
-  return path.usable === null ? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER + 1;
+  if (path.usable === true) return (path.minKeys ?? UNRANKED) * 1000 + (path.minSigners ?? 0);
+  return path.usable === null ? UNRANKED * 1000 : UNRANKED * 1000 + 1;
 }
 
 export function resolveAuthPaths(snapshot: AccountSnapshot, target: AuthTarget): AuthPath[] {
@@ -162,12 +199,12 @@ export function resolveAuthPaths(snapshot: AccountSnapshot, target: AuthTarget):
     .sort((a, b) => rank(a) - rank(b) || a.ruleId - b.ruleId);
 
   const weakest = paths[0];
-  if (weakest?.usable === true && weakest.minSigners !== null) {
+  if (weakest?.usable === true && weakest.minKeys !== null) {
     const scopedRuleIds = new Set(
       snapshot.rules.filter(r => r.contextType.kind !== 'default').map(r => r.id)
     );
     for (const other of paths.slice(1)) {
-      const stricter = other.usable !== true || (other.minSigners ?? 0) > weakest.minSigners;
+      const stricter = other.usable !== true || (other.minKeys ?? 0) > (weakest.minKeys as number);
       if (scopedRuleIds.has(other.ruleId) && !scopedRuleIds.has(weakest.ruleId) && stricter) {
         weakest.notes.push(
           `bypasses rule ${other.ruleId} ("${other.ruleName}"): the caller can choose this rule instead`

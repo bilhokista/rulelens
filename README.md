@@ -32,15 +32,19 @@ stellar-contracts v0.7.2; no signing or submission happens.
 
 ### Verified against the chain
 
-`scripts/verifyOnChain.ts` submits real testnet XLM transfers out of the fixture accounts with a chosen signer set and
-compares the result of `__check_auth` with the model. Last run (2026-09-13), 4 of 4 matched:
+`scripts/verifyOnChain.ts` asks the model whether a signer set can move XLM out of a fixture account through a given
+rule, then submits the real transfer on testnet and compares. Last run (2026-09-13): **8 of 8 matched**.
 
 | Case | Model | Chain |
 |---|---|---|
-| 1-of-3 fixture, 1 signer | pass | SUCCESS `d9c13fb7…29a5` |
-| 2-of-2 control, 1 signer | fail | `Error(Contract, #3202)` simple threshold NotAllowed |
-| 2-of-2 control, 2 signers | pass | SUCCESS `4926fba7…1d80` |
-| Weighted fixture, 2 signers (weight 2 of 3) | fail | `Error(Contract, #3213)` weighted threshold NotAllowed |
+| 1-of-3, 1 signer | pass | SUCCESS |
+| 2-of-2, 1 signer | fail | `Error(Contract, #3202)` simple threshold NotAllowed |
+| 2-of-2, 2 signers | pass | SUCCESS |
+| Weighted, signers reach 2 of 3 | fail | `Error(Contract, #3213)` weighted threshold NotAllowed |
+| 2-of-2 where both signers are one ed25519 key under two verifiers, 1 device | pass | SUCCESS |
+| Spending-limit rule, within limit | pass | SUCCESS |
+| Spending-limit rule, above remaining limit | fail | `Error(Contract, #3221)` SpendingLimitExceeded |
+| Default single-signer rule, same amount above the limit | pass | SUCCESS (bypasses the spending limit) |
 
 ## Checks
 
@@ -58,16 +62,22 @@ Policies are identified by the getters the OpenZeppelin example contracts expose
 ## Live testnet fixtures
 
 Deployed from the unmodified `examples/multisig-smart-account` contracts of stellar-contracts v0.7.2 with
-`scripts/deployFixtures.ts`:
+`scripts/deployFixtures.ts` and `scripts/fixturesRound2.ts`:
 
-| Fixture | Contract | Expected |
+| Fixture | Contract | RuleLens |
 |---|---|---|
 | Weighted rule, threshold 3, signers reach 2, non-signer holds weight 5 | `CASLFL4M7SKKPFO3FOJWRKJR62LPMYITCFNFQVLCXEEAU2DNTVECKMPY` | critical + medium |
 | Default rule 1-of-3 | `CA3VOWHPC4GK7SHEME4QJYVXP3PY4LVBKPXOUMZI5KY53I6J3IF6LSYD` | high |
 | Control 2-of-2 | `CDWM7QXUM6TSKOTUEOUAKSO33GMAMWSIQ5HEFYU5ZISYAYCOX64GI7F3` | no findings |
+| 2-of-2 made of one ed25519 key under two verifier contracts | `CAL34VDFZXZ7NIJLRDEREHISG5CSX6UMIBFNH36W2T5PZV5RUAUBJB65` | high; `--simulate` shows 2 signers from 1 distinct key |
+| Default single-signer rule plus CallContract spending-limit rule with zero-amount history | `CDVKSXZXMYVDLE33NJ7UP4GZMERIAYY2RMP7B6SDOFYJIXRVHTCU4ETU` | high + low; `--simulate` shows the Default rule bypasses the limit |
 
-The first fixture also shows that `weighted_threshold::install` accepts weights for addresses that are not rule
-signers, so an unreachable threshold can be created at deployment, not only after `remove_signer`.
+Two library behaviours these fixtures demonstrate:
+
+- `weighted_threshold::install` accepts weights for addresses that are not rule signers, so an unreachable threshold can
+  be deployed from the constructor.
+- Canonical duplicate detection is per verifier address. The same ed25519 key under two verifier deployments passes
+  `validate_no_canonical_duplicates` and satisfies a 2-of-2 threshold with one device.
 
 ## Development
 
@@ -80,7 +90,6 @@ npm run coverage
 ## Not yet covered
 
 - Cross-verifier check compares raw key bytes; canonical comparison through `batch_canonicalize_key` is not done.
-- Spending-limit and cross-verifier checks have unit tests but no testnet fixture yet.
 - `--simulate` models one context per call; multi-context transactions and policy combinations are lower bounds.
 - Rules with custom (non-OpenZeppelin) policies are reported as undetermined.
 

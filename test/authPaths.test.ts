@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { resolveAuthPaths } from '../src/authPaths.js';
 import type { Policy } from '../src/types.js';
-import { alice, bob, carol, rule, snapshot } from './fixtures.js';
+import { alice, bob, carol, passkey, rule, snapshot } from './fixtures.js';
 
 const TOKEN = 'CTOKEN';
 const call = (fn = 'transfer', amount?: bigint) => ({ kind: 'call' as const, contract: TOKEN, fn, amount });
@@ -166,5 +166,57 @@ describe('resolveAuthPaths', () => {
       { kind: 'create', wasmHashHex: 'AB' }
     );
     expect(paths.map(p => p.ruleId)).toEqual([1]);
+  });
+
+  it('counts distinct keys when one key is registered under two verifiers', () => {
+    const paths = resolveAuthPaths(
+      snapshot([
+        rule({
+          signers: [passkey('CV1', '04aa'), passkey('CV2', '04AA'), alice],
+          policies: [{ kind: 'simpleThreshold', address: 'CT', threshold: 2 }],
+        }),
+      ]),
+      call()
+    );
+    expect(paths[0]).toMatchObject({ minSigners: 2, minKeys: 1 });
+  });
+
+  it('counts distinct keys for weighted thresholds', () => {
+    const paths = resolveAuthPaths(
+      snapshot([
+        rule({
+          signers: [passkey('CV1', '04aa'), passkey('CV2', '04aa'), alice],
+          policies: [
+            {
+              kind: 'weightedThreshold',
+              address: 'CW',
+              threshold: 4,
+              weights: [
+                { signer: passkey('CV1', '04aa'), weight: 2 },
+                { signer: passkey('CV2', '04aa'), weight: 2 },
+                { signer: alice, weight: 3 },
+              ],
+            },
+          ],
+        }),
+      ]),
+      call()
+    );
+    expect(paths[0]).toMatchObject({ minKeys: 1 });
+  });
+
+  it('ranks by distinct keys so a duplicated key rule is weaker than a real 2-of-2', () => {
+    const paths = resolveAuthPaths(
+      snapshot([
+        rule({ id: 1, signers: [alice, bob], policies: [{ kind: 'simpleThreshold', address: 'CT', threshold: 2 }] }),
+        rule({
+          id: 2,
+          signers: [passkey('CV1'), passkey('CV2')],
+          policies: [{ kind: 'simpleThreshold', address: 'CT2', threshold: 2 }],
+        }),
+      ]),
+      call()
+    );
+    expect(paths.map(p => p.ruleId)).toEqual([2, 1]);
   });
 });

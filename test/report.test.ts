@@ -17,12 +17,12 @@ describe('formatReport', () => {
 
   it('names the weakest path and blocked rules', () => {
     const out = formatAuthPaths({ kind: 'call', contract: 'CTOKEN', fn: 'transfer', amount: 5n }, [
-      { ruleId: 2, ruleName: 'hot', usable: true, minSigners: 1, summary: 'any 1 of [a]', notes: ['bypasses rule 1'] },
-      { ruleId: 1, ruleName: 'cold', usable: false, minSigners: null, summary: 'threshold 3 exceeds 2', notes: [] },
+      { ruleId: 2, ruleName: 'hot', usable: true, minSigners: 1, minKeys: 1, summary: 'any 1 of [a]', notes: ['bypasses rule 1'] },
+      { ruleId: 1, ruleName: 'cold', usable: false, minSigners: null, minKeys: null, summary: 'threshold 3 exceeds 2', notes: [] },
     ]);
     expect(out).toContain('CTOKEN.transfer() amount 5');
     expect(out).toContain('rule 1 "cold": BLOCKED');
-    expect(out).toContain('Weakest path: rule 2 with 1 signer(s)');
+    expect(out).toContain('Weakest path: rule 2, 1 distinct key(s)');
   });
 
   it('explains when no rule matches', () => {
