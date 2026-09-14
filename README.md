@@ -22,10 +22,18 @@ work, is direct evidence the gap is real — the library accepts a configuration
 
 ## Usage
 
+Published on npm — no clone needed:
+
+```sh
+npx rulelens <smart-account C-address> --network testnet   # or mainnet, or --rpc <url>
+npx rulelens <C-address> --json                            # machine-readable output
+```
+
+Or from source:
+
 ```sh
 npm install
-npx tsx src/cli.ts <smart-account C-address> --network testnet   # or mainnet, or --rpc <url>
-npx tsx src/cli.ts <C-address> --json                            # machine-readable output
+npx tsx src/cli.ts <smart-account C-address> --network testnet
 ```
 
 Exit code `0` means no critical or high findings, `1` means at least one, `2` means a usage or network error.
@@ -33,8 +41,8 @@ Exit code `0` means no critical or high findings, `1` means at least one, `2` me
 ## Who can authorize a call
 
 ```sh
-npx tsx src/cli.ts <account> --simulate <token C-address>:transfer:1000
-npx tsx src/cli.ts <account> --simulate create:<wasm-hash>
+npx rulelens <account> --simulate <token C-address>:transfer:1000
+npx rulelens <account> --simulate create:<wasm-hash>
 ```
 
 The transaction author picks which context rule authorizes each call, so an account is only as strict as the weakest
