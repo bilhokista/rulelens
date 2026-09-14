@@ -1,16 +1,55 @@
 {
   "name": "rulelens",
   "version": "0.1.0",
-  "description": "Configuration checker for OpenZeppelin Stellar smart accounts",
+  "description": "Configuration checker for deployed OpenZeppelin Stellar smart accounts. Reads a live account over Soroban RPC and reports unsafe or unusable configurations with the exact fix call. Read-only.",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "bin": {
     "rulelens": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "keywords": [
+    "stellar",
+    "soroban",
+    "smart-account",
+    "smart-accounts",
+    "openzeppelin",
+    "security",
+    "configuration",
+    "checker",
+    "web3"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bilhokista/rulelens.git"
+  },
+  "homepage": "https://github.com/bilhokista/rulelens#readme",
+  "bugs": {
+    "url": "https://github.com/bilhokista/rulelens/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "license": "Apache-2.0",
   "dependencies": {
