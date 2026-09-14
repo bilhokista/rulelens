@@ -7,6 +7,19 @@ policies, and verifier contracts. The library is audited, but a deployed account
 that is unsafe or unusable. RuleLens reads a live account over Soroban RPC and reports those states with the exact call
 that fixes them. It reads only; it never signs or submits anything.
 
+## How it compares
+
+Existing Stellar/Soroban security tooling works on source code or the library, not on a deployed account's configuration:
+
+- **CoinFabrik Scout** is a source-code linter (CLI + VSCode) for Soroban contracts — it flags issues in Rust source
+  during development, not the configuration of a live account.
+- **OpenZeppelin's audits and Certora's formal verification** cover the smart-account library code. An audited library
+  can still be configured, at deployment or later, into an unsafe or unusable account.
+
+RuleLens checks the layer neither covers: the configuration of an already-deployed account, read over Soroban RPC.
+[OpenZeppelin/stellar-contracts#892](https://github.com/OpenZeppelin/stellar-contracts/issues/892), filed from this
+work, is direct evidence the gap is real — the library accepts a configuration no source-level tool would flag.
+
 ## Usage
 
 ```sh
@@ -75,7 +88,7 @@ Deployed from the unmodified `examples/multisig-smart-account` contracts of stel
 Two library behaviours these fixtures demonstrate:
 
 - `weighted_threshold::install` accepts weights for addresses that are not rule signers, so an unreachable threshold can
-  be deployed from the constructor.
+  be deployed from the constructor (reported: [OpenZeppelin/stellar-contracts#892](https://github.com/OpenZeppelin/stellar-contracts/issues/892)).
 - Canonical duplicate detection is per verifier address. The same ed25519 key under two verifier deployments passes
   `validate_no_canonical_duplicates` and satisfies a 2-of-2 threshold with one device.
 
